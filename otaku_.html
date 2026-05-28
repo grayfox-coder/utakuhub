@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OtakuHub — Lean Media Discovery</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --canvas: #09090b;
+      --surface: #18181b;
+      --surface2: #232326;
+      --border: #2a2a2f;
+      --a1: #8b5cf6;
+      --a1-dim: #3b2a6e;
+      --a2: #f43f5e;
+      --a2-dim: #5b1a27;
+      --txt: #fafafa;
+      --muted: #a1a1aa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #020203;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: 20px;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      color: var(--txt);
+    }
+    .app {
+      display: flex;
+      background: var(--canvas);
+      border-radius: 20px;
+      overflow: hidden;
+      width: 100%;
+      max-width: 1200px;
+      height: 800px;
+      border: 1px solid var(--border);
+      position: relative;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+    }
+    /* SIDEBAR */
+    .sidebar {
+      width: 64px;
+      background: rgba(10,10,13,0.4);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 0;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--a1), #6d28d9);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 20px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(139,92,246,0.3);
+    }
+    .logo span { color: #fff; font-size: 14px; font-weight: 700; letter-spacing: -0.5px; }
+    .nav-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+      font-size: 20px; border: none; background: transparent;
+    }
+    .nav-icon:hover { background: var(--surface); color: var(--txt); transform: translateY(-1px); }
+    .nav-icon.active { background: rgba(139,92,246,0.12); color: var(--a1); border: 1px solid rgba(139,92,246,0.2); }
+    .nav-sep { flex: 1; }
+    /* MAIN */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .topbar {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 16px;
+      flex-shrink: 0;
+      background: rgba(9,9,11,0.7);
+      backdrop-filter: blur(12px);
+      z-index: 2;
+    }
+    .type-switcher {
+      display: flex;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px; gap: 4px;
+      flex-shrink: 0;
+    }
+    .type-btn {
+      padding: 6px 16px; border-radius: 8px;
+      font-size: 13px; font-weight: 500;
+      color: var(--muted); cursor: pointer;
+      transition: all 0.2s; border: none;
+      background: transparent; font-family: inherit;
+    }
+    .type-btn:hover { color: var(--txt); }
+    .type-btn.active { background: var(--surface2); color: var(--txt); border: 1px solid var(--border); }
+    .search-wrap { position: relative; flex: 1; }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; pointer-events: none; }
+    .search-wrap input {
+      width: 100%; background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 9px 16px 9px 40px; font-size: 13px;
+      color: var(--txt); outline: none; font-family: inherit;
+      transition: all 0.2s;
+    }
+    .search-wrap input::placeholder { color: #4b4b54; }
+    .search-wrap input:focus { border-color: var(--a1); background: var(--surface); box-shadow: 0 0 0 3px rgba(139,92,246,0.15); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FILTER BAR — FACETED SEARCH MATRIX
+       ═══════════════════════════════════════════════════════════════ */
+    .filter-bar {
+      padding: 10px 24px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+      background: rgba(9,9,11,0.5);
+      backdrop-filter: blur(8px);
+      z-index: 2;
+      flex-wrap: wrap;
+    }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .filter-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+    /* Sort Dropdown */
+    .sort-dropdown {
+      position: relative;
+    }
+    .sort-trigger {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--txt);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .sort-trigger:hover {
+      border-color: rgba(139,92,246,0.3);
+      background: var(--surface2);
+    }
+    .sort-trigger i { font-size: 14px; color: var(--muted); }
+    .sort-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      min-width: 180px;
+      background: #141418;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      z-index: 50;
+    }
+    .sort-menu.open { display: flex; }
+    .sort-option {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sort-option:hover { background: rgba(255,255,255,0.04); color: var(--txt); }
+    .sort-option.active { background: rgba(139,92,246,0.12); color: var(--a1); }
+    .sort-option i { font-size: 14px; }
+    /* Genre Pills */
+    .genre-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .genre-pill {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+      white-space: nowrap;
+    }
+    .genre-pill:hover {
+      border-color: rgba(139,92,246,0.3);
+      color: var(--txt);
+      transform: translateY(-1px);
+    }
+    .genre-pill.active {
+      background: rgba(139,92,246,0.15);
+      color: var(--a1);
+      border-color: var(--a1);
+      box-shadow: 0 0 0 2px rgba(139,92,246,0.1);
+    }
+    .genre-pill .pill-x {
+      margin-left: 4px;
+      font-size: 10px;
+      opacity: 0.7;
+    }
+    /* Active filter count badge */
+    .filter-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: var(--a1);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      margin-left: 4px;
+    }
+
+    /* CONTENT */
+    .content { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; align-items: stretch; gap: 0; z-index: 1; }
+    .content::-webkit-scrollbar { width: 6px; }
+    .content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 20px; }
+    .sec-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 2px; }
+    /* MEDIA CONTENT CONTAINER */
+    #mediaContent {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    /* LOADING */
+    .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 60px; color: var(--muted); }
+    .spinner { width: 32px; height: 32px; border: 2px solid var(--border); border-top-color: var(--a1); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* FEATURED ROW */
+    .featured-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; width: 100%; }
+    .feat-card {
+      border-radius: 14px; overflow: hidden; cursor: pointer;
+      position: relative; background: var(--surface);
+      border: 1px solid var(--border); height: 180px;
+      transition: all 0.3s cubic-bezier(0.2,0.8,0.2,1);
+    }
+    .feat-card:hover { transform: translateY(-2px); border-color: rgba(139,92,246,0.2); box-shadow: 0 12px 20px -10px rgba(139,92,246,0.15); }
+    .feat-thumb { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; transition: opacity 0.3s; }
+    .feat-card:hover .feat-thumb { opacity: 1; }
+    .feat-overlay {
+      position: absolute; inset: 0; padding: 16px;
+      display: flex; flex-direction: column; justify-content: flex-end;
+      background: linear-gradient(to top, rgba(9,9,11,0.95) 0%, rgba(9,9,11,0.4) 60%, transparent 100%);
+    }
+    .feat-title { font-size: 14px; font-weight: 600; color: var(--txt); margin-bottom: 4px; line-height: 1.3; }
+    .feat-sub {font-size: 11px; color: var(--muted); }
+    .feat-bm {
+      position: absolute; top: 10px; right: 10px;
+      width: 28px; height: 28px;
+      background: rgba(9,9,11,0.6); backdrop-filter: blur(8px);
+      border: 1px solid var(--border); border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px; opacity: 0; transform: scale(0.9);
+      transition: all 0.2s; cursor: pointer;
+    }
+    .feat-card:hover .feat-bm { opacity: 1; transform: scale(1); }
+    .feat-bm:hover { color: var(--a1); border-color: var(--a1); background: var(--canvas); }
+    .feat-bm.saved { color: var(--a1); border-color: var(--a1); opacity: 1; transform: scale(1); }
+    /* CARDS GRID */
+    .cards-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; width: 100%; }
+    .card {
+      border-radius: 12px; overflow: hidden; cursor: pointer;
+      position: relative; background: var(--surface);
+      border: 1px solid var(--border);
+      transition: all 0.3s cubic-bezier(0.2,0.8,0.2,1);
+    }
+    .card:hover { transform: translateY(-4px); border-color: rgba(139,92,246,0.2); box-shadow: 0 12px 24px -10px rgba(0,0,0,0.5); }
+    .card-thumb { width: 100%; aspect-ratio: 3/4; object-fit: cover; opacity: 0.9; transition: opacity 0.3s; }
+    .card:hover .card-thumb { opacity: 1; }
+    .card-overlay {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 14px 10px 10px;
+      background: linear-gradient(to top, rgba(9,9,11,1) 20%, rgba(9,9,11,0.5) 70%, transparent 100%);
+    }
+    .card-title { font-size: 12px; font-weight: 600; color: var(--txt); line-height: 1.3; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-meta { display: flex; align-items: center; justify-content: space-between; }
+    .card-fmt { font-size: 10px; color: var(--muted); background: rgba(255,255,255,0.04); border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px; font-weight: 500; }
+    .card-score { font-size: 11px; color: #fbbf24; display: flex; align-items: center; gap: 3px; font-weight: 600; }
+    .card-bm {
+      position: absolute; top: 10px; right: 10px;
+      width: 28px; height: 28px;
+      background: rgba(9,9,11,0.6); backdrop-filter: blur(8px);
+      border: 1px solid var(--border); border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px; opacity: 0; transform: scale(0.9);
+      transition: all 0.2s; cursor: pointer;
+    }
+    .card:hover .card-bm { opacity: 1; transform: scale(1); }
+    .card-bm:hover { color: var(--a1); border-color: var(--a1); background: var(--canvas); }
+    .card-bm.saved { color: var(--a1); border-color: var(--a1); opacity: 1; transform: scale(1); }
+    /* DETAIL DRAWER */
+    .drawer-bd { position: absolute; inset: 0; background: rgba(2,2,3,0.6); backdrop-filter: blur(4px); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 10; }
+    .drawer-bd.open { opacity: 1; pointer-events: all; }
+    .drawer {
+      position: absolute; top: 0; right: 0; bottom: 0;
+      width: 380px; background: #0f0f13;
+      border-left: 1px solid var(--border);
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.16,1,0.3,1);
+      z-index: 11; display: flex; flex-direction: column;
+      overflow: hidden; box-shadow: -10px 0 40px rgba(0,0,0,0.5);
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-banner {
+      height: 180px; flex-shrink: 0; position: relative;
+      display: flex; align-items: center; justify-content: center;
+      border-bottom: 1px solid var(--border); overflow: hidden;
+    }
+    .drawer-banner-img { position: absolute; inset: 0; object-fit: cover; width: 100%; height: 100%; filter: blur(20px) brightness(0.4); transform: scale(1.2); }
+    .drawer-cover { position: relative; z-index: 2; width: 100px; height: 140px; border-radius: 10px; object-fit: cover; box-shadow: 0 8px 24px rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.1); }
+    .drawer-close {
+      position: absolute; top: 12px; right: 12px; z-index: 3;
+      width: 28px; height: 28px;
+      background: rgba(9,9,11,0.6); backdrop-filter: blur(8px);
+      border: 1px solid var(--border); border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--muted); font-size: 14px;
+      transition: all 0.2s;
+    }
+    .drawer-close:hover { color: var(--txt); border-color: rgba(255,255,255,0.2); }
+    .drawer-body { padding: 20px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+    .drawer-body::-webkit-scrollbar { width: 4px; }
+    .drawer-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+    .d-title { font-size: 18px; font-weight: 700; color: var(--txt); line-height: 1.2; }
+    .d-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .d-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,0.03); color: var(--muted); border: 1px solid var(--border); }
+    .d-studio { font-size: 11px; color: var(--muted); font-weight: 500; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat { background: rgba(255,255,255,0.02); border-radius: 10px; padding: 10px 14px; border: 1px solid var(--border); }
+    .stat-lbl { font-size: 9px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+    .stat-val { font-size: 16px; font-weight: 700; color: var(--txt); }
+    .d-syn { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag { font-size: 10px; font-weight: 500; padding: 4px 10px; border-radius: 8px; background: rgba(255,255,255,0.02); color: var(--muted); border: 1px solid var(--border); }
+    .tag.hl { background: rgba(139,92,246,0.12); color: var(--a1); border-color: rgba(139,92,246,0.15); }
+    .d-divider { height: 1px; background: var(--border); margin: 4px 0; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .act {
+      padding: 10px; border-radius: 10px; font-size: 12px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      gap: 6px; transition: all 0.2s; border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02); color: var(--muted); font-family: inherit;
+    }
+    .act:hover { background: var(--surface2); color: var(--txt); }
+    .act.like { border-color: var(--a2); color: var(--a2); background: var(--a2-dim); }
+    .act.like:hover { background: rgba(244,63,94,0.25); }
+    .act.like.active { background: var(--a2); color: #fff; }
+    .act.add { border-color: var(--a1); color: var(--a1); background: var(--a1-dim); }
+    .act.add:hover { background: rgba(139,92,246,0.25); }
+    .act.add.active { background: var(--a1); color: #fff; }
+    /* TOAST */
+    .toast-el {
+      position: absolute; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(12px);
+      background: #181822; border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+      color: var(--txt); font-size: 12px; font-weight: 500;
+      padding: 8px 18px; border-radius: 20px; opacity: 0;
+      transition: transform 0.3s cubic-bezier(0.175,0.885,0.32,1.275), opacity 0.2s;
+      pointer-events: none; z-index: 20;
+    }
+    .toast-el.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    /* EMPTY STATE */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .empty-state i { font-size: 48px; margin-bottom: 16px; display: block; opacity: 0.3; }
+    .empty-state p { font-size: 14px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       PAGINATION RAIL SYSTEM
+       ═══════════════════════════════════════════════════════════════ */
+    .pagination-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 16px;
+      flex-wrap: wrap;
+      background: rgba(9,9,11,0.85);
+      backdrop-filter: blur(16px);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 5;
+    }
+    .pg-btn {
+      min-width: 36px;
+      height: 36px;
+      padding: 0 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+      color: var(--muted);
+      transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .pg-btn:hover:not(.disabled):not(.active) {
+      background: var(--surface2);
+      color: var(--txt);
+      border-color: rgba(139,92,246,0.3);
+      transform: translateY(-1px);
+    }
+    .pg-btn.active {
+      background: rgba(139,92,246,0.15);
+      color: var(--a1);
+      border-color: var(--a1);
+      box-shadow: 0 0 0 2px rgba(139,92,246,0.1);
+    }
+    .pg-btn.disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    .pg-dots {
+      min-width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       RESPONSIVE MOBILE STYLES
+       ═══════════════════════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      body {
+        padding: 0;
+        min-height: 100dvh;
+      }
+      .app {
+        border-radius: 0;
+        max-width: 100%;
+        height: 100dvh;
+        border: none;
+        box-shadow: none;
+      }
+      /* Mobile Sidebar - Collapsible Bottom Nav */
+      .sidebar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 56px;
+        flex-direction: row;
+        justify-content: space-around;
+        padding: 0;
+        border-right: none;
+        border-top: 1px solid var(--border);
+        background: rgba(9,9,11,0.95);
+        backdrop-filter: blur(20px);
+        z-index: 100;
+      }
+      .logo {
+        display: none;
+      }
+      .nav-sep {
+        display: none;
+      }
+      .nav-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        font-size: 22px;
+      }
+      .nav-icon.active {
+        border: none;
+        background: rgba(139,92,246,0.15);
+      }
+      /* Main area padding for bottom nav */
+      .main {
+        padding-bottom: 56px;
+      }
+      /* Topbar mobile */
+      .topbar {
+        padding: 10px 12px;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .type-switcher {
+        order: 2;
+        width: 100%;
+        justify-content: center;
+      }
+      .search-wrap {
+        order: 1;
+        flex: 1;
+        min-width: 0;
+      }
+      .search-wrap input {
+        padding: 8px 12px 8px 36px;
+        font-size: 14px;
+      }
+      /* Filter bar mobile */
+      .filter-bar {
+        padding: 8px 12px 10px;
+        gap: 10px;
+      }
+      .filter-label {
+        font-size: 10px;
+      }
+      .sort-trigger {
+        padding: 5px 10px;
+        font-size: 11px;
+      }
+      .genre-pill {
+        padding: 4px 10px;
+        font-size: 10px;
+      }
+      /* Content area mobile */
+      .content {
+        padding: 12px;
+        gap: 12px;
+      }
+      /* Featured row - stack on mobile */
+      .featured-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .feat-card {
+        height: 160px;
+      }
+      /* Cards grid - 2 columns on mobile */
+      .cards-row {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+      /* Pagination mobile */
+      .pagination-wrap {
+        gap: 4px;
+        padding: 10px 8px;
+        position: fixed;
+        bottom: 56px;
+        left: 0;
+        right: 0;
+        background: rgba(9,9,11,0.95);
+        backdrop-filter: blur(20px);
+        border-top: 1px solid var(--border);
+        z-index: 90;
+      }
+      /* Main area padding for bottom nav + pagination */
+      .main {
+        padding-bottom: 112px;
+      }
+      /* Drawer - full width on mobile */
+      .drawer {
+        width: 100%;
+        border-left: none;
+      }
+      .drawer-banner {
+        height: 160px;
+      }
+      .drawer-cover {
+        width: 90px;
+        height: 125px;
+      }
+      .drawer-body {
+        padding: 16px;
+      }
+      .d-title {
+        font-size: 16px;
+      }
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .stat-val {
+        font-size: 14px;
+      }
+      .actions {
+        grid-template-columns: 1fr 1fr;
+      }
+      .act {
+        padding: 12px;
+        font-size: 13px;
+      }
+      /* Toast positioning */
+      .toast-el {
+        bottom: 128px;
+        font-size: 13px;
+        padding: 10px 20px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .cards-row {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+      .card-title {
+        font-size: 11px;
+      }
+      .card-fmt {
+        font-size: 9px;
+      }
+      .card-score {
+        font-size: 10px;
+      }
+      .feat-title {
+        font-size: 13px;
+      }
+      .feat-sub {
+        font-size: 10px;
+      }
+      .topbar {
+        padding: 8px 10px;
+      }
+      .type-btn {
+        padding: 5px 12px;
+        font-size: 12px;
+      }
+      .filter-bar {
+        padding: 6px 10px 8px;
+      }
+    }
+
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .app {
+        max-width: 100%;
+        height: 100dvh;
+        border-radius: 0;
+      }
+      .cards-row {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .featured-row {
+        grid-template-columns: 1fr 1fr;
+      }
+      .featured-row .feat-card:first-child {
+        grid-column: 1 / -1;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Nav Rail -->
+  <div class="sidebar">
+    <div class="logo"><span>OH</span></div>
+    <div class="nav-icon active" title="Home" onclick="setNav(this)"><i class="ti ti-smart-home"></i></div>
+    <div class="nav-icon" title="Discover" onclick="setNav(this)"><i class="ti ti-compass"></i></div>
+    <div class="nav-icon" title="Search" onclick="setNav(this)"><i class="ti ti-search"></i></div>
+    <div class="nav-sep"></div>
+    <div class="nav-icon" title="My List" onclick="setNav(this)"><i class="ti ti-bookmark"></i></div>
+    <div class="nav-icon" title="Profile" onclick="setNav(this)"><i class="ti ti-user"></i></div>
+  </div>
+
+  <div class="main">
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="type-switcher">
+        <button class="type-btn active" data-type="ANIME" onclick="switchType(this)">Anime</button>
+        <button class="type-btn" data-type="MANGA" onclick="switchType(this)">Manga</button>
+        <button class="type-btn" data-type="MANHWA" onclick="switchType(this)">Manhwa</button>
+      </div>
+      <div class="search-wrap">
+        <i class="ti ti-search search-icon"></i>
+        <input type="text" id="searchInput" placeholder="Search titles, genres, creators..." oninput="onSearchInput(this.value)">
+      </div>
+      <button class="nav-icon" style="flex-shrink:0" title="Notifications"><i class="ti ti-bell"></i></button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar" id="filterBar">
+      <div class="filter-group">
+        <span class="filter-label">Sort</span>
+        <div class="sort-dropdown" id="sortDropdown">
+          <button class="sort-trigger" onclick="toggleSortMenu()">
+            <i class="ti ti-adjustments"></i>
+            <span id="sortLabel">Trending</span>
+            <i class="ti ti-chevron-down" style="margin-left:auto;font-size:10px;"></i>
+          </button>
+          <div class="sort-menu" id="sortMenu">
+            <button class="sort-option active" data-sort="TRENDING_DESC" onclick="selectSort(this)">
+              <i class="ti ti-flame"></i> Trending
+            </button>
+            <button class="sort-option" data-sort="POPULARITY_DESC" onclick="selectSort(this)">
+              <i class="ti ti-users"></i> Most Popular
+            </button>
+            <button class="sort-option" data-sort="SCORE_DESC" onclick="selectSort(this)">
+              <i class="ti ti-star"></i> Highest Score
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="filter-group" style="flex:1;min-width:0;">
+        <span class="filter-label">Genres</span>
+        <div class="genre-pills" id="genrePills"></div>
+      </div>
+    </div>
+
+    <!-- Content Area -->
+    <div class="content" id="contentArea">
+      <div class="loading-state" id="loadingState">
+        <div class="spinner"></div>
+        <span>Loading trending titles...</span>
+      </div>
+      <div id="mediaContent" style="display:none; width:100%;">
+        <div class="sec-label" style="text-align:left; margin-bottom:12px;">Trending now</div>
+        <div class="featured-row" id="featuredRow" style="width:100%; margin-bottom:24px;"></div>
+        <div class="sec-label" style="text-align:left; margin-top:24px; margin-bottom:12px;">Popular items</div>
+        <div class="cards-row" id="cardsGrid" style="width:100%;"></div>
+      </div>
+    </div>
+
+    <!-- Pagination Rail -->
+    <div class="pagination-wrap" id="paginationRail"></div>
+
+    <!-- Drawer Backdrop -->
+    <div class="drawer-bd" id="bd" onclick="closeDrawer()"></div>
+    <!-- Detail Drawer -->
+    <div class="drawer" id="drawer">
+      <div class="drawer-banner" id="dBanner">
+        <img class="drawer-banner-img" id="dBannerImg" src="" alt="">
+        <img class="drawer-cover" id="dCover" src="" alt="">
+        <button class="drawer-close" onclick="closeDrawer()"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="drawer-body">
+        <div class="d-title" id="dTitle"></div>
+        <div class="d-row" id="dMeta"></div>
+        <div class="stats-grid">
+          <div class="stat"><div class="stat-lbl">Community Score</div><div class="stat-val" id="dScore"></div></div>
+          <div class="stat"><div class="stat-lbl">Format</div><div class="stat-val" id="dFormat"></div></div>
+        </div>
+        <div class="d-syn" id="dSyn"></div>
+        <div class="tags" id="dTags"></div>
+        <div class="d-divider"></div>
+        <div class="actions">
+          <button class="act like" id="btnLike" onclick="toggleLike()"><i class="ti ti-heart-filled"></i> Like</button>
+          <button class="act add" id="btnSave" onclick="toggleSave()"><i class="ti ti-bookmark-filled"></i> Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast-el" id="toast"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  ANILIST GRAPHQL CLIENT — FACETED SEARCH
+// ═══════════════════════════════════════════════════════════════
+const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
+
+const TRENDING_QUERY = `
+  query ($page: Int, $perPage: Int, $type: MediaType, $country: CountryCode, $search: String, $genreIn: [String], $sort: [MediaSort]) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo {
+        total
+        currentPage
+        lastPage
+        hasNextPage
+      }
+      media(type: $type, countryOfOrigin: $country, search: $search, genre_in: $genreIn, sort: $sort, isAdult: false) {
+        id
+        title { romaji english native }
+        type
+        format
+        status
+        episodes
+        chapters
+        averageScore
+        genres
+        description
+        bannerImage
+        coverImage { large extraLarge }
+        seasonYear
+        studios(isMain: true) { edges { node { name } } }
+      }
+    }
+  }
+`;
+
+// ═══════════════════════════════════════════════════════════════
+//  STATE MANAGEMENT — FACETED SEARCH + PAGINATION
+// ═══════════════════════════════════════════════════════════════
+let currentMediaType = 'ANIME';
+let allMedia = [];
+let featuredMedia = [];
+let currentDetailId = null;
+let userInteractions = {};
+
+// Pagination state
+let currentPage = 1;
+let lastPage = 1;
+let isFetching = false;
+
+// Faceted filter state
+let searchQuery = '';
+let selectedGenres = [];
+let currentSort = 'TRENDING_DESC';
+let searchDebounceTimer = null;
+const SEARCH_DEBOUNCE_MS = 400;
+
+const ITEMS_PER_PAGE = 50;
+
+// Available genre pills
+const AVAILABLE_GENRES = ['Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller'];
+
+// Sort label mapping
+const SORT_LABELS = {
+  'TRENDING_DESC': 'Trending',
+  'POPULARITY_DESC': 'Most Popular',
+  'SCORE_DESC': 'Highest Score'
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  DATA RETRIEVAL — FACETED SEARCH WITH DEBOUNCE
+// ═══════════════════════════════════════════════════════════════
+async function fetchMedia(type, page = 1) {
+  if (isFetching) return;
+  isFetching = true;
+  showLoading(true);
+
+  const variables = {
+    page: page,
+    perPage: ITEMS_PER_PAGE,
+    type: type === 'MANHWA' ? 'MANGA' : type,
+    country: type === 'MANHWA' ? 'KR' : (type === 'MANGA' ? 'JP' : undefined),
+    search: searchQuery || undefined,
+    genreIn: selectedGenres.length > 0 ? selectedGenres : undefined,
+    sort: [currentSort]
+  };
+
+  Object.keys(variables).forEach(k => variables[k] === undefined && delete variables[k]);
+
+  try {
+    const res = await fetch(ANILIST_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ query: TRENDING_QUERY, variables })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors[0].message);
+
+    const media = json.data.Page.media || [];
+    const pageInfo = json.data.Page.pageInfo;
+
+    currentPage = pageInfo.currentPage;
+    lastPage = pageInfo.lastPage;
+
+    allMedia = media.map(m => ({ ...m, _mediaType: type }));
+    featuredMedia = allMedia.slice(0, 3);
+
+    render();
+    renderPagination();
+    showLoading(false);
+  } catch (err) {
+    console.error('AniList retrieval workflow exception:', err);
+    showLoading(false);
+    document.getElementById('contentArea').innerHTML = `
+      <div class="empty-state">
+        <i class="ti ti-wifi-off"></i>
+        <p>Unable to load titles. Please check your connection.</p>
+      </div>`;
+  } finally {
+    isFetching = false;
+  }
+}
+
+function showLoading(show) {
+  document.getElementById('loadingState').style.display = show ? 'flex' : 'none';
+  document.getElementById('mediaContent').style.display = show ? 'none' : 'flex';
+  document.getElementById('mediaContent').style.flexDirection = 'column';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDERING ENGINE
+// ═══════════════════════════════════════════════════════════════
+function render() {
+  renderFeatured();
+  renderGrid(allMedia.slice(3));
+}
+
+function renderFeatured() {
+  const container = document.getElementById('featuredRow');
+  container.innerHTML = featuredMedia.map((m) => `
+    <div class="feat-card" onclick="openDrawer(${m.id})" data-title="${escapeHtml(m.title.romaji || m.title.english || '')}">
+      <img class="feat-thumb" src="${m.coverImage?.extraLarge || m.coverImage?.large || ''}" alt="" loading="lazy" onerror="this.src='https://via.placeholder.com/600x400/18181b/a1a1aa?text=No+Image';">
+      <div class="feat-overlay">
+        <div class="feat-title">${escapeHtml(m.title.romaji || m.title.english || 'Untitled')}</div>
+        <div class="feat-sub">${m.format || 'TV'} • ${m.episodes || m.chapters || '?'} ${m.type === 'ANIME' ? 'episodes' : 'chapters'} • ${m.seasonYear || 'N/A'}</div>
+      </div>
+      <button class="feat-bm ${isSaved(m.id, m._mediaType) ? 'saved' : ''}" onclick="event.stopPropagation();toggleBookmark(${m.id}, '${m._mediaType}', this)"><i class="ti ti-bookmark"></i></button>
+    </div>
+  `).join('');
+}
+
+function renderGrid(items) {
+  const container = document.getElementById('cardsGrid');
+  container.innerHTML = items.map(m => `
+    <div class="card" onclick="openDrawer(${m.id})" data-title="${escapeHtml(m.title.romaji || m.title.english || '')}">
+      <img class="card-thumb" src="${m.coverImage?.large || m.coverImage?.medium || ''}" alt="" loading="lazy" onerror="this.src='https://via.placeholder.com/300x400/18181b/a1a1aa?text=No+Image';">
+      <div class="card-overlay">
+        <div class="card-title">${escapeHtml(m.title.romaji || m.title.english || 'Untitled')}</div>
+        <div class="card-meta">
+          <span class="card-fmt">${m.format || 'TV'}</span>
+          <span class="card-score"><i class="ti ti-star-filled"></i> ${(m.averageScore ? (m.averageScore / 10).toFixed(1) : '0.0')}</span>
+        </div>
+      </div>
+      <button class="card-bm ${isSaved(m.id, m._mediaType) ? 'saved' : ''}" onclick="event.stopPropagation();toggleBookmark(${m.id}, '${m._mediaType}', this)"><i class="ti ti-bookmark"></i></button>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GENRE PILLS RENDERING
+// ═══════════════════════════════════════════════════════════════
+function renderGenrePills() {
+  const container = document.getElementById('genrePills');
+  container.innerHTML = AVAILABLE_GENRES.map(g => {
+    const isActive = selectedGenres.includes(g);
+    return `<button class="genre-pill ${isActive ? 'active' : ''}" onclick="toggleGenre('${g}', this)">${g}${isActive ? '<span class="pill-x">×</span>' : ''}</button>`;
+  }).join('');
+}
+
+function toggleGenre(genre, btnEl) {
+  if (selectedGenres.includes(genre)) {
+    selectedGenres = selectedGenres.filter(g => g !== genre);
+  } else {
+    selectedGenres.push(genre);
+  }
+  renderGenrePills();
+  // Reset to page 1 on genre change
+  fetchMedia(currentMediaType, 1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SORT DROPDOWN
+// ═══════════════════════════════════════════════════════════════
+function toggleSortMenu() {
+  const menu = document.getElementById('sortMenu');
+  menu.classList.toggle('open');
+}
+
+function selectSort(btn) {
+  const sortValue = btn.dataset.sort;
+  currentSort = sortValue;
+
+  // Update UI
+  document.querySelectorAll('.sort-option').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('sortLabel').textContent = SORT_LABELS[sortValue];
+
+  // Close menu
+  document.getElementById('sortMenu').classList.remove('open');
+
+  // Reset to page 1 on sort change
+  fetchMedia(currentMediaType, 1);
+}
+
+// Close sort menu when clicking outside
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('sortDropdown');
+  if (dropdown && !dropdown.contains(e.target)) {
+    const menu = document.getElementById('sortMenu');
+    if (menu) menu.classList.remove('open');
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  SEARCH INPUT WITH DEBOUNCE
+// ═══════════════════════════════════════════════════════════════
+function onSearchInput(value) {
+  // Clear existing debounce timer
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+  }
+
+  searchQuery = value.trim();
+
+  if (searchQuery === '') {
+    // If cleared, immediately fetch default trending catalog
+    fetchMedia(currentMediaType, 1);
+    return;
+  }
+
+  // Set new debounce timer - 400ms
+  searchDebounceTimer = setTimeout(() => {
+    fetchMedia(currentMediaType, 1);
+  }, SEARCH_DEBOUNCE_MS);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PAGINATION RAIL — SLIDING WINDOW MATRIX
+// ═══════════════════════════════════════════════════════════════
+function renderPagination() {
+  const container = document.getElementById('paginationRail');
+  const pages = buildPageWindow(currentPage, lastPage);
+
+  container.innerHTML = pages.map(p => {
+    if (p === 'prev') {
+      const disabled = currentPage <= 1 ? 'disabled' : '';
+      return `<button class="pg-btn ${disabled}" onclick="goToPage(${currentPage - 1})" ${disabled ? 'disabled' : ''}><i class="ti ti-chevron-left"></i></button>`;
+    }
+    if (p === 'next') {
+      const disabled = currentPage >= lastPage ? 'disabled' : '';
+      return `<button class="pg-btn ${disabled}" onclick="goToPage(${currentPage + 1})" ${disabled ? 'disabled' : ''}><i class="ti ti-chevron-right"></i></button>`;
+    }
+    if (p === 'dots') {
+      return `<span class="pg-dots">...</span>`;
+    }
+    const active = p === currentPage ? 'active' : '';
+    return `<button class="pg-btn ${active}" onclick="goToPage(${p})">${p}</button>`;
+  }).join('');
+}
+
+function buildPageWindow(current, last) {
+  const result = [];
+  result.push('prev');
+
+  if (last <= 7) {
+    for (let i = 1; i <= last; i++) {
+      result.push(i);
+    }
+  } else {
+    if (current <= 4) {
+      for (let i = 1; i <= 4; i++) {
+        result.push(i);
+      }
+      result.push('dots');
+      result.push(last);
+    } else if (current >= last - 3) {
+      result.push(1);
+      result.push('dots');
+      for (let i = last - 3; i <= last; i++) {
+        result.push(i);
+      }
+    } else {
+      result.push(1);
+      result.push('dots');
+      for (let i = current - 1; i <= current + 1; i++) {
+        result.push(i);
+      }
+      result.push('dots');
+      result.push(last);
+    }
+  }
+
+  result.push('next');
+  return result;
+}
+
+function goToPage(page) {
+  if (page < 1 || page > lastPage || page === currentPage || isFetching) return;
+
+  const contentArea = document.getElementById('contentArea');
+  contentArea.scrollTo({ top: 0, behavior: 'smooth' });
+
+  fetchMedia(currentMediaType, page);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INTERACTIONS LAYER
+// ═══════════════════════════════════════════════════════════════
+function getKey(id, type) { return `${id}_${type}`; }
+function isSaved(id, type) { return userInteractions[getKey(id, type)]?.watchlist_status === 'PLANNING'; }
+function isLiked(id, type) { return userInteractions[getKey(id, type)]?.is_liked === true; }
+
+function toggleBookmark(anilistId, mediaType, btnEl) {
+  const key = getKey(anilistId, mediaType);
+  const existing = userInteractions[key];
+  const nextStatus = existing?.watchlist_status === 'PLANNING' ? 'NONE' : 'PLANNING';
+
+  userInteractions[key] = {
+    ...existing,
+    user_id: 'local-user',
+    anilist_id: anilistId,
+    media_type: mediaType,
+    watchlist_status: nextStatus,
+    updated_at: new Date().toISOString()
+  };
+
+  if (btnEl) {
+    btnEl.classList.toggle('saved', nextStatus === 'PLANNING');
+  } else {
+    document.querySelectorAll(`.card-bm, .feat-bm`).forEach(el => {
+      const card = el.closest('.card, .feat-card');
+      if(card && card.getAttribute('onclick').includes(`openDrawer(${anilistId})`)) {
+        el.classList.toggle('saved', nextStatus === 'PLANNING');
+      }
+    });
+  }
+
+  toast(nextStatus === 'PLANNING' ? 'Saved to Watchlist' : 'Removed from Watchlist');
+  if (currentDetailId === anilistId) updateDrawerButtons(anilistId, mediaType);
+}
+
+function toggleLike() {
+  if (!currentDetailId) return;
+  const media = findMedia(currentDetailId);
+  if (!media) return;
+
+  const key = getKey(currentDetailId, media._mediaType);
+  const existing = userInteractions[key];
+  const nextLiked = existing?.is_liked === true ? null : true;
+
+  userInteractions[key] = { ...existing, user_id: 'local-user', anilist_id: currentDetailId, media_type: media._mediaType, is_liked: nextLiked, updated_at: new Date().toISOString() };
+  updateDrawerButtons(currentDetailId, media._mediaType);
+  toast(nextLiked === true ? 'You liked this title!' : 'Like removed');
+}
+
+function toggleSave() {
+  if (!currentDetailId) return;
+  const media = findMedia(currentDetailId);
+  if (!media) return;
+  toggleBookmark(currentDetailId, media._mediaType, null);
+}
+
+function updateDrawerButtons(id, type) {
+  const likeBtn = document.getElementById('btnLike');
+  const saveBtn = document.getElementById('btnSave');
+  const liked = isLiked(id, type);
+  const saved = isSaved(id, type);
+
+  likeBtn.classList.toggle('active', liked);
+  likeBtn.innerHTML = liked ? '<i class="ti ti-heart-filled"></i> Liked' : '<i class="ti ti-heart-filled"></i> Like';
+  saveBtn.classList.toggle('active', saved);
+  saveBtn.innerHTML = saved ? '<i class="ti ti-bookmark-filled"></i> Saved' : '<i class="ti ti-bookmark-filled"></i> Save';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DETAIL DRAWER LAYER
+// ═══════════════════════════════════════════════════════════════
+function openDrawer(anilistId) {
+  const media = findMedia(anilistId);
+  if (!media) return;
+
+  currentDetailId = anilistId;
+  const bannerImg = document.getElementById('dBannerImg');
+  const bannerSrc = media.bannerImage || media.coverImage?.extraLarge || media.coverImage?.large || '';
+
+  if (bannerSrc) {
+    bannerImg.src = bannerSrc;
+    bannerImg.style.background = '';
+  } else {
+    bannerImg.src = '';
+    bannerImg.style.background = 'linear-gradient(135deg, #2e1065, #4c1d95)';
+  }
+
+  document.getElementById('dCover').src = media.coverImage?.large || '';
+  document.getElementById('dTitle').textContent = media.title.romaji || media.title.english || 'Untitled';
+
+  const studio = media.studios?.edges?.[0]?.node?.name || 'Unknown Studio';
+  document.getElementById('dMeta').innerHTML = `
+    <span class="d-badge">${media.format || 'TV'}</span>
+    <span class="d-badge">${media.status || 'N/A'}</span>
+    <span class="d-studio">${studio} • ${media.seasonYear || 'N/A'}</span>
+  `;
+
+  const score = media.averageScore ? (media.averageScore / 10).toFixed(1) : 'N/A';
+  document.getElementById('dScore').textContent = score === 'N/A' ? score : score + ' / 10';
+  document.getElementById('dFormat').textContent = media.format || 'TV';
+
+  document.getElementById('dSyn').textContent = (media.description || 'No synopsis available.').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  document.getElementById('dTags').innerHTML = (media.genres || []).map((g, i) => `<span class="tag${i < 2 ? ' hl' : ''}">${escapeHtml(g)}</span>`).join('');
+
+  updateDrawerButtons(anilistId, media._mediaType);
+  document.getElementById('bd').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('bd').classList.remove('open');
+  document.getElementById('drawer').classList.remove('open');
+  currentDetailId = null;
+}
+
+function findMedia(id) {
+  return allMedia.find(m => m.id === id) || featuredMedia.find(m => m.id === id);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  UI CONTROLS & UTILITIES
+// ═══════════════════════════════════════════════════════════════
+function switchType(btn) {
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentMediaType = btn.dataset.type;
+
+  // Reset search and filters on type switch
+  document.getElementById('searchInput').value = '';
+  searchQuery = '';
+  selectedGenres = [];
+  renderGenrePills();
+
+  // Reset to Page 1
+  fetchMedia(currentMediaType, 1);
+}
+
+function setNav(el) {
+  document.querySelectorAll('.nav-icon').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INITIALIZATION
+// ═══════════════════════════════════════════════════════════════
+renderGenrePills();
+fetchMedia('ANIME', 1);
+</script>
+
+</body>
+</html>
