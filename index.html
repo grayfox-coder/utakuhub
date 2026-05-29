@@ -853,6 +853,7 @@
   </style>
   <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -1986,8 +1987,25 @@ function updateDrawerButtons(id, type) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PROGRESS TRACKER — INCREMENT / DECREMENT LOGIC
+//  PROGRESS TRACKER — INCREMENT / DECREMENT LOGIC (FIXED)
 // ═══════════════════════════════════════════════════════════════
+//
+//  CRITICAL FIX APPLIED:
+//  ─────────────────────
+//  The original code used a three-state model (PLANNING → CURRENT → COMPLETED)
+//  but the UI only rendered PLANNING and COMPLETED sections in "My List".
+//  This caused any item with 'CURRENT' status to effectively disappear from
+//  the user's watchlist, making it seem like the anime was deleted.
+//
+//  FIX: Simplified to a strict two-tier state machine:
+//       • PLANNING  → item is in the wishlist, tracking progress
+//       • COMPLETED → item is finished, max progress reached
+//
+//  All 'CURRENT' status references have been removed. Items now stay in
+//  'PLANNING' while progress is >0 but <max, and only transition to
+//  'COMPLETED' when progress === max_progress.
+// ═══════════════════════════════════════════════════════════════
+
 function updateProgressTracker(anilistId, mediaType) {
   var tracker = document.getElementById('progressTracker');
   var labelEl = document.getElementById('progressLabel');
@@ -2017,6 +2035,7 @@ function updateProgressTracker(anilistId, mediaType) {
   if (currentEl) currentEl.textContent = currentProg;
   if (maxEl) maxEl.textContent = maxProg;
 
+  // Safe bounds: disable minus at 0, disable plus at max
   if (minusBtn) minusBtn.disabled = currentProg <= 0;
   if (plusBtn) plusBtn.disabled = currentProg >= maxProg;
 }
@@ -2031,40 +2050,47 @@ function adjustProgress(delta) {
   var record = ensureInteractionRecord(currentDetailId, mediaType);
   var maxProg = record.max_progress || getMediaMaxProgress(media);
 
+  // Safe bounds check: if no max progress data, cannot track
   if (maxProg === 0) return;
 
   var currentProg = record.progress || 0;
   var newProgress = currentProg + delta;
 
-  // Clamp progress between 0 and max_progress
+  // ─── STRICT BOUNDS ENFORCEMENT ───────────────────────────────
+  // Clamp progress between 0 and max_progress (inclusive)
   if (newProgress < 0) newProgress = 0;
   if (newProgress > maxProg) newProgress = maxProg;
 
+  // If no actual change, abort early
   if (newProgress === currentProg) return;
 
-  // Determine new status based on progress changes
+  // ─── TWO-TIER STATE MACHINE (PLANNING ↔ COMPLETED) ───────────
+  //
+  // Rules:
+  //   • progress === 0        → status stays/remains 'PLANNING'
+  //   • 0 < progress < max    → status stays/remains 'PLANNING'
+  //   • progress === max      → status becomes 'COMPLETED'
+  //   • decrement from max    → status reverts to 'PLANNING'
+  //
+  // The 'CURRENT' status has been ELIMINATED to prevent items from
+  // disappearing from the My List view (which only renders PLANNING
+  // and COMPLETED sections).
+
   var newStatus = record.watchlist_status;
 
-  // Auto-shift from PLANNING to CURRENT when progress goes from 0 to >0
-  if (newProgress > 0 && record.watchlist_status === 'PLANNING') {
-    newStatus = 'CURRENT';
-  }
-
-  // Auto-complete when progress reaches max
   if (newProgress === maxProg && maxProg > 0) {
+    // Auto-complete: hit the ceiling → COMPLETED
     newStatus = 'COMPLETED';
     toast('Congratulations! You completed this title!');
-  }
-
-  // If progress drops below max and was COMPLETED, shift to CURRENT
-  if (newProgress < maxProg && record.watchlist_status === 'COMPLETED') {
-    newStatus = 'CURRENT';
-  }
-
-  // If progress returns to 0 and was CURRENT, shift to PLANNING
-  if (newProgress === 0 && record.watchlist_status === 'CURRENT') {
+  } else if (newProgress < maxProg) {
+    // Any progress below max (including 0) → PLANNING
+    // This covers:
+    //   • decrementing from COMPLETED back down
+    //   • incrementing from 0 toward max
+    //   • setting progress to 0 explicitly
     newStatus = 'PLANNING';
   }
+  // If newProgress === 0, status is already 'PLANNING' from the else branch above
 
   userInteractions[key] = Object.assign({}, record, {
     watchlist_status: newStatus,
@@ -2081,16 +2107,225 @@ function adjustProgress(delta) {
   updateAllBookmarkButtons(currentDetailId, newStatus);
 
   // Toast for regular adjustments (not auto-complete which has its own toast)
-  if (newStatus !== 'COMPLETED' || newProgress !== maxProg) {
+  if (!(newStatus === 'COMPLETED' && newProgress === maxProg)) {
     var label = isAnimeType(mediaType) ? 'Episode' : 'Chapter';
     toast(label + ' ' + newProgress + ' of ' + maxProg);
   }
 
-  // Refresh views
+  // Refresh My List view if visible so the card moves to the correct section
   if (currentActiveView === 'mylist') syncMyListGrid();
   if (currentActiveView === 'profile') syncProfileStats();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  AUXILIARY: ensureInteractionRecord — PROGRESS AWARE
+// ═══════════════════════════════════════════════════════════════
+//
+//  When creating a fresh interaction record, we now explicitly set
+//  max_progress from the media object so the tracker has a ceiling.
+// ═══════════════════════════════════════════════════════════════
+
+function ensureInteractionRecord(anilistId, mediaType) {
+  var key = getKey(anilistId, mediaType);
+  var mediaRef = findMedia(anilistId);
+  var maxProg = getMediaMaxProgress(mediaRef);
+
+  if (!userInteractions[key]) {
+    userInteractions[key] = {
+      user_id: 'local-user',
+      anilist_id: anilistId,
+      media_type: mediaType,
+      watchlist_status: 'NONE',
+      progress: 0,
+      max_progress: maxProg,
+      updated_at: new Date().toISOString(),
+      cachedTitle: mediaRef ? (mediaRef.title.romaji || mediaRef.title.english) : 'Untitled Match',
+      cachedImage: mediaRef ? (mediaRef.coverImage?.large) : '',
+      cachedFormat: mediaRef ? (mediaRef.format) : 'TV',
+      cachedScore: mediaRef ? (mediaRef.averageScore) : 0
+    };
+  } else if (userInteractions[key].max_progress === 0 && maxProg > 0) {
+    // Backfill max_progress if it was missing when the record was first created
+    userInteractions[key].max_progress = maxProg;
+  }
+  return userInteractions[key];
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUXILIARY: updateAllBookmarkButtons — STATUS SYNC
+// ═══════════════════════════════════════════════════════════════
+//
+//  Ensures that every visible bookmark button reflects the exact
+//  tracking status (PLANNING or COMPLETED) so the user sees
+//  consistent state across the entire app.
+// ═══════════════════════════════════════════════════════════════
+
+function updateAllBookmarkButtons(anilistId, newStatus) {
+  document.querySelectorAll('.card-bm, .feat-bm').forEach(function(el) {
+    var card = el.closest('.card, .feat-card');
+    if (card) {
+      var onclickAttr = card.getAttribute('onclick') || '';
+      if (onclickAttr.indexOf('openDrawer(' + anilistId + ')') !== -1) {
+        el.classList.remove('saved-planning', 'saved-completed');
+        if (newStatus === 'PLANNING') el.classList.add('saved-planning');
+        else if (newStatus === 'COMPLETED') el.classList.add('saved-completed');
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUXILIARY: syncMyListGrid — TWO-TIER RENDER (PLANNING / COMPLETED)
+// ═══════════════════════════════════════════════════════════════
+//
+//  My List now strictly renders two sections:
+//    1. Wishlist     → watchlist_status === 'PLANNING'
+//    2. Watched      → watchlist_status === 'COMPLETED'
+//
+//  Any record with status 'NONE' is ignored (not tracked).
+//  The old 'CURRENT' status is no longer generated, so no items
+//  can fall into a hidden limbo state.
+// ═══════════════════════════════════════════════════════════════
+
+function syncMyListGrid() {
+  var wishlistGrid = document.getElementById('wishlistGrid');
+  var completedGrid = document.getElementById('completedGrid');
+  var wishlistSection = document.getElementById('wishlistSection');
+  var completedSection = document.getElementById('completedSection');
+  var divider = document.getElementById('myListDivider');
+  var globalEmpty = document.getElementById('myListGlobalEmpty');
+  var wishlistCount = document.getElementById('wishlistCount');
+  var completedCount = document.getElementById('completedCount');
+
+  if (!wishlistGrid || !completedGrid) return;
+
+  var allTrackedItems = Object.values(userInteractions);
+  var wishlistItems = allTrackedItems.filter(function(item) { return item.watchlist_status === 'PLANNING'; });
+  var completedItems = allTrackedItems.filter(function(item) { return item.watchlist_status === 'COMPLETED'; });
+
+  if (wishlistCount) wishlistCount.textContent = wishlistItems.length + ' item' + (wishlistItems.length !== 1 ? 's' : '');
+  if (completedCount) completedCount.textContent = completedItems.length + ' item' + (completedItems.length !== 1 ? 's' : '');
+
+  var bothEmpty = wishlistItems.length === 0 && completedItems.length === 0;
+
+  if (bothEmpty) {
+    if (wishlistSection) wishlistSection.style.display = 'none';
+    if (completedSection) completedSection.style.display = 'none';
+    if (divider) divider.style.display = 'none';
+    if (globalEmpty) globalEmpty.style.display = 'block';
+    return;
+  }
+
+  if (globalEmpty) globalEmpty.style.display = 'none';
+
+  // Render Wishlist Section (PLANNING)
+  if (wishlistItems.length === 0) {
+    if (wishlistSection) wishlistSection.style.display = 'none';
+  } else {
+    if (wishlistSection) wishlistSection.style.display = 'block';
+    wishlistGrid.style.display = 'grid';
+    wishlistGrid.innerHTML = wishlistItems.map(function(item) {
+      var m = findMedia(item.anilist_id) || {
+        id: item.anilist_id,
+        title: { romaji: item.cachedTitle || 'Media Reference ID #' + item.anilist_id },
+        coverImage: { large: item.cachedImage || 'https://via.placeholder.com/300x400/18181b/a1a1aa?text=Saved+Item' },
+        format: item.cachedFormat || 'N/A',
+        averageScore: item.cachedScore || 0,
+        _mediaType: item.media_type
+      };
+      var maxProg = item.max_progress || getMediaMaxProgress(m);
+      var progLabel = isAnimeType(item.media_type) ? 'EP' : 'CH';
+      var progressBadge = maxProg > 0 ? '<span class="card-fmt" style="background:rgba(139,92,246,0.15);color:var(--a1);border-color:rgba(139,92,246,0.3);">' + progLabel + ' ' + (item.progress || 0) + '/' + maxProg + '</span>' : '';
+
+      return '<div class="card" onclick="openDrawer(' + m.id + ')" data-title="' + escapeHtml(m.title.romaji || m.title.english || '') + '">' +
+        '<img class="card-thumb" src="' + getMediaImage(m, 'large') + '" alt="" loading="lazy" onerror="this.src=\'https://via.placeholder.com/300x400/18181b/a1a1aa?text=No+Image\';">' +
+        '<div class="card-overlay">' +
+          '<div class="card-title">' + escapeHtml(m.title.romaji || m.title.english || 'Untitled') + '</div>' +
+          '<div class="card-meta">' +
+            progressBadge +
+            '<span class="card-score"><i class="ti ti-star-filled"></i> ' + (m.averageScore ? (m.averageScore/10).toFixed(1) : '0.0') + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<button class="card-bm saved-planning" onclick="event.stopPropagation(); toggleStatus(' + m.id + ', \' + item.media_type + \', \'PLANNING\', this)">' +
+          '<i class="ti ti-bookmark"></i>' +
+        '</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  // Render Completed Section (COMPLETED)
+  if (completedItems.length === 0) {
+    if (completedSection) completedSection.style.display = 'none';
+    if (divider) divider.style.display = 'none';
+  } else {
+    if (completedSection) completedSection.style.display = 'block';
+    if (divider) divider.style.display = wishlistItems.length > 0 ? 'block' : 'none';
+    completedGrid.style.display = 'grid';
+    completedGrid.innerHTML = completedItems.map(function(item) {
+      var m = findMedia(item.anilist_id) || {
+        id: item.anilist_id,
+        title: { romaji: item.cachedTitle || 'Media Reference ID #' + item.anilist_id },
+        coverImage: { large: item.cachedImage || 'https://via.placeholder.com/300x400/18181b/a1a1aa?text=Saved+Item' },
+        format: item.cachedFormat || 'N/A',
+        averageScore: item.cachedScore || 0,
+        _mediaType: item.media_type
+      };
+      var maxProg = item.max_progress || getMediaMaxProgress(m);
+      var progLabel = isAnimeType(item.media_type) ? 'EP' : 'CH';
+      var progressBadge = maxProg > 0 ? '<span class="card-fmt" style="background:rgba(16,185,129,0.15);color:var(--emerald);border-color:rgba(16,185,129,0.3);">' + progLabel + ' ' + (item.progress || 0) + '/' + maxProg + '</span>' : '';
+
+      return '<div class="card" onclick="openDrawer(' + m.id + ')" data-title="' + escapeHtml(m.title.romaji || m.title.english || '') + '">' +
+        '<img class="card-thumb" src="' + getMediaImage(m, 'large') + '" alt="" loading="lazy" onerror="this.src=\'https://via.placeholder.com/300x400/18181b/a1a1aa?text=No+Image\';">' +
+        '<div class="card-overlay">' +
+          '<div class="card-title">' + escapeHtml(m.title.romaji || m.title.english || 'Untitled') + '</div>' +
+          '<div class="card-meta">' +
+            progressBadge +
+            '<span class="card-score"><i class="ti ti-star-filled"></i> ' + (m.averageScore ? (m.averageScore/10).toFixed(1) : '0.0') + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<button class="card-bm saved-completed" onclick="event.stopPropagation(); toggleStatus(' + m.id + ', \' + item.media_type + \', \'COMPLETED\', this)">' +
+          '<i class="ti ti-check-circle"></i>' +
+        '</button>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUXILIARY: computeOtakuPortfolio — TWO-TIER STATS
+// ═══════════════════════════════════════════════════════════════
+//
+//  Portfolio stats now only count PLANNING and COMPLETED statuses.
+//  The 'CURRENT' status is no longer part of the data model.
+// ═══════════════════════════════════════════════════════════════
+
+function computeOtakuPortfolio() {
+  var items = Object.values(userInteractions);
+  var s = {
+    completedAnime: 0, planningAnime: 0, totalEpisodes: 0,
+    completedManga: 0, planningManga: 0, totalMangaChapters: 0,
+    completedManhwa: 0, planningManhwa: 0, totalManhwaChapters: 0
+  };
+  items.forEach(function(item) {
+    var t = item.media_type;
+    var status = item.watchlist_status;
+    var progress = item.progress || 0;
+    if (t === 'ANIME') {
+      if (status === 'COMPLETED') s.completedAnime += 1;
+      if (status === 'PLANNING')  s.planningAnime  += 1;
+      s.totalEpisodes += progress;
+    } else if (t === 'MANGA') {
+      if (status === 'COMPLETED') s.completedManga += 1;
+      if (status === 'PLANNING')  s.planningManga  += 1;
+      s.totalMangaChapters += progress;
+    } else if (t === 'MANHWA') {
+      if (status === 'COMPLETED') s.completedManhwa += 1;
+      if (status === 'PLANNING')  s.planningManhwa  += 1;
+      s.totalManhwaChapters += progress;
+    }
+  });
+  return s;
+}
 // ═══════════════════════════════════════════════════════════════
 //  CENTRAL OVERLAY DRAWER CORE CONTROL LAYER
 // ═══════════════════════════════════════════════════════════════
